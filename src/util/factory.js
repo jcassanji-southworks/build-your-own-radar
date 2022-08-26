@@ -23,26 +23,43 @@ const ExceptionMessages = require('./exceptionMessages')
 const GoogleAuth = require('./googleAuth')
 const config = require('../config')
 
-const plotRadar = function (title, blips, currentRadarName, alternativeRadars) {
+const plotRadar = function (title, blips, currentRadarName, alternativeRadars, ringConfig) {
   if (title.endsWith('.csv')) {
     title = title.substring(0, title.length - 4)
   }
   if (title.endsWith('.json')) {
     title = title.substring(0, title.length - 5)
   }
+  if (title.endsWith('api')) {
+    title = title.substring(0, title.length - 3)
+  }
   document.title = title
   d3.selectAll('.loading').remove()
 
   var rings = _.map(_.uniqBy(blips, 'ring'), 'ring')
   var ringMap = {}
-  var maxRings = 4
+  var maxRings = Object.keys(ringConfig).length
 
+  var ringOrder = Object.values(ringConfig)
+  var ringNames = Object.keys(ringConfig)
+
+  console.log(ringConfig)
+
+  for (let index = 1; index <= maxRings; index++) {
+    let lowerCaseName = ringNames[ringOrder.indexOf(index)].toLowerCase()
+    ringMap[lowerCaseName] = new Ring(lowerCaseName, index - 1)
+    //console.log(lowerCaseName, index - 1)
+  }
+
+  /*
   _.each(rings, function (ringName, i) {
     if (i === maxRings) {
       throw new MalformedDataError(ExceptionMessages.TOO_MANY_RINGS)
     }
+    //console.log(ringName, i)
     ringMap[ringName] = new Ring(ringName, i)
-  })
+    console.log('OBJ =', ringName, i)
+  })*/
 
   var quadrants = {}
   _.each(blips, function (blip) {
@@ -192,14 +209,17 @@ const JSONFile = function (url) {
   }
 
   var createBlips = function (data) {
+    ringConfigs = data[0]['config']
+    data.shift()
     try {
       var columnNames = Object.keys(data[0])
       var contentValidator = new ContentValidator(columnNames)
       contentValidator.verifyContent()
       contentValidator.verifyHeaders()
       var blips = _.map(data, new InputSanitizer().sanitize)
-      plotRadar(FileName(url), blips, 'JSON File', [])
+      plotRadar(FileName(url), blips, 'JSON File', [], ringConfigs)
     } catch (exception) {
+      //console.log(data)
       plotErrorMessage(exception, 'json')
     }
   }
@@ -243,9 +263,12 @@ const GoogleSheetInput = function () {
     } else if (queryParams.sheetId && queryParams.sheetId.endsWith('.json')) {
       sheet = JSONFile(queryParams.sheetId)
       sheet.init().build()
+    } else if (queryParams.sheetId && queryParams.sheetId.endsWith('api')) {
+      sheet = JSONFile(queryParams.sheetId)
+      sheet.init().build()
     } else if (domainName && domainName.endsWith('google.com') && queryParams.sheetId) {
       sheet = GoogleSheet(queryParams.sheetId, queryParams.sheetName)
-      console.log(queryParams.sheetName)
+      //console.log(queryParams.sheetName)
 
       sheet.init().build()
     } else {
